@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cicd-final-project
+  labels:
+    app: cicd-final-project
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cicd-final-project
+  template:
+    metadata:
+      labels:
+        app: cicd-final-project
+    spec:
+      containers:
+        - name: app
+          image: cicd-final-project:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: PORT
+              value: '8000'
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault

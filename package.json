@@ -1,0 +1,24 @@
+{
+  "name": "cicd-final-project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CI/CD final project with GitHub Actions, Tekton and OpenShift",
+  "scripts": {
+    "start": "node src/server.js",
+    "lint": "eslint .",
+    "test": "jest --ci --coverage --runInBand"
+  },
+  "engines": { "node": ">=22" },
+  "devDependencies": {
+    "eslint": "^9.39.0",
+    "jest": "^30.2.0",
+    "yaml": "^2.8.1"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "collectCoverageFrom": ["src/app.js"],
+    "coverageThreshold": {
+      "global": { "branches": 100, "functions": 100, "lines": 100, "statements": 100 }
+    }
+  }
+}

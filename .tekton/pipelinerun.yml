@@ -1,0 +1,22 @@
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: oc-final-
+spec:
+  pipelineRef:
+    name: oc-final
+  taskRunTemplate:
+    serviceAccountName: pipeline
+  params:
+    - name: repo-url
+      value: https://github.com/YOUR_USERNAME/YOUR_REPOSITORY.git
+    - name: revision
+      value: main
+    - name: image-repository
+      value: image-registry.openshift-image-registry.svc:5000/YOUR_NAMESPACE/cicd-final-project
+  workspaces:
+    - name: shared-workspace
+      persistentVolumeClaim:
+        claimName: pipeline-pvc
+  timeouts:
+    pipeline: 30m0s

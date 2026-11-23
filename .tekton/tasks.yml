@@ -1,0 +1,142 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: cleanup
+spec:
+  description: Clear only the dedicated source workspace before cloning.
+  workspaces:
+    - name: source
+  steps:
+    - name: cleanup
+      image: alpine:3.22
+      script: |
+        #!/bin/sh
+        set -eu
+        cd "$(workspaces.source.path)"
+        find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: git-clone
+spec:
+  params:
+    - name: url
+      type: string
+    - name: revision
+      type: string
+      default: main
+  workspaces:
+    - name: source
+  steps:
+    - name: clone
+      image: alpine/git:2.49.1
+      env:
+        - name: REPO_URL
+          value: $(params.url)
+        - name: REVISION
+          value: $(params.revision)
+      workingDir: $(workspaces.source.path)
+      script: |
+        #!/bin/sh
+        set -eu
+        git clone --depth 1 --branch "$REVISION" -- "$REPO_URL" .
+        git rev-parse HEAD
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: eslint
+spec:
+  workspaces:
+    - name: source
+  steps:
+    - name: lint
+      image: node:22-alpine
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: npm_config_cache
+          value: /tmp/npm-cache
+      script: |
+        #!/bin/sh
+        set -eu
+        npm ci --no-audit --no-fund
+        npm run lint
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: jest
+spec:
+  description: Run the application's Jest tests with coverage.
+  workspaces:
+    - name: source
+  steps:
+    - name: test
+      image: node:22-alpine
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: CI
+          value: 'true'
+      script: |
+        #!/bin/sh
+        set -eu
+        npm test
+        node scripts/validate-manifests.js
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: buildah
+spec:
+  params:
+    - name: image
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: build-and-push
+      image: quay.io/buildah/stable:latest
+      workingDir: $(workspaces.source.path)
+      securityContext:
+        runAsUser: 0
+        capabilities:
+          add: [SETFCAP]
+      env:
+        - name: IMAGE
+          value: $(params.image)
+        - name: REGISTRY_AUTH_FILE
+          value: /tmp/registry-auth.json
+      script: |
+        #!/bin/sh
+        set -eu
+        REGISTRY="${IMAGE%%/*}"
+        buildah login --tls-verify=false --username serviceaccount \
+          --password-stdin "$REGISTRY" < /var/run/secrets/kubernetes.io/serviceaccount/token
+        buildah --storage-driver=vfs bud --isolation=chroot --format=oci -t "$IMAGE" .
+        buildah --storage-driver=vfs push --tls-verify=false "$IMAGE" "docker://$IMAGE"
+---
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: deploy
+spec:
+  params:
+    - name: image
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: openshift-client
+      image: quay.io/openshift/origin-cli:4.16
+      workingDir: $(workspaces.source.path)
+      env:
+        - name: IMAGE
+          value: $(params.image)
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+        oc set image --local -f openshift/deployment.yml app="$IMAGE" -o yaml | oc apply -f -
+        oc apply -f openshift/service.yml
+        oc rollout status deployment/cicd-final-project --timeout=180s
+        oc logs deployment/cicd-final-project

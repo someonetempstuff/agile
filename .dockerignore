@@ -1,0 +1,11 @@
+.git
+.github
+.tekton
+node_modules
+.npm-cache
+coverage
+tests
+scripts
+evidence
+docs
+eslint.config.js

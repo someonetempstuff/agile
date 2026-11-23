@@ -1,0 +1,40 @@
+name: CI pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    name: ESLint and Jest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source code
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint with ESLint
+        run: npm run lint
+      - name: Run unit tests with Jest
+        run: npm test
+      - name: Validate pipeline manifests
+        run: node scripts/validate-manifests.js
+      - name: Build container image
+        run: docker build --tag cicd-final-project:${{ github.sha }} .
+      - name: Upload test coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: jest-coverage
+          path: coverage/
